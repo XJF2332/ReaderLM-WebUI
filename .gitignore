@@ -1,7 +1,7 @@
 /.idea
 /.gradio
 /html
-/models
+/models/*.gguf
 /flagged
 /__pycache__
 /Reader-LM.bat

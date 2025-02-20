@@ -22,6 +22,11 @@ pyperclip
 gradio
 ```
 
+### 下载模型
+
+只支持 GGUF 模型  
+请把下载好的模型放置到`models`文件夹中
+
 ### 开始使用
 
 ```commandline
