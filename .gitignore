@@ -1,0 +1,7 @@
+/.idea
+/.gradio
+/html
+/models
+/flagged
+/__pycache__
+/Reader-LM.bat
