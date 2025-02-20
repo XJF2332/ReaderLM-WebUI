@@ -1,8 +1,9 @@
-import gradio as gr
 import os
-from llama_cpp import Llama
-import pyperclip
 import re
+
+import gradio as gr
+import pyperclip
+from llama_cpp import Llama
 
 model = None
 stop_gen = False
@@ -49,15 +50,86 @@ def load_model(model_path, n_gpu_layers, n_ctx):
     return f"模型 '{model_path}' 已成功加载"
 
 
+def clean_html(html: str, repl_svg: bool = False, repl_base64: bool = False, new_svg: str = "this is a placeholder",
+               new_img: str = "#") -> str:
+    # 匹配模式
+    script = r"<[ ]*script.*?\/[ ]*script[ ]*>"
+    style = r"<[ ]*style.*?\/[ ]*style[ ]*>"
+    meta = r"<[ ]*meta.*?>"
+    comment = r"<[ ]*!--.*?--[ ]*>"
+    link = r"<[ ]*link.*?>"
+    svg = r"(<svg[^>]*>)(.*?)(<\/svg>)"
+    base64_img = r'<img[^>]+src="data:image/[^;]+;base64,[^"]+"[^>]*>'
 
-def generate_response(html_file, max_tokens, temperature, top_p):
+    def replace_svg(html: str, new_content: str) -> str:
+        return re.sub(
+            svg,
+            lambda match: f"{match.group(1)}{new_content}{match.group(3)}",
+            html,
+            flags=re.DOTALL,
+        )
+
+    def replace_base64_images(html: str, new_image_src) -> str:
+        return re.sub(base64_img, f'<img src="{new_image_src}"/>', html)
+
+    html = re.sub(
+        script, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
+    )
+    html = re.sub(
+        style, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
+    )
+    html = re.sub(
+        meta, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
+    )
+    html = re.sub(
+        comment, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
+    )
+    html = re.sub(
+        link, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
+    )
+
+    if repl_svg:
+        html = replace_svg(html, new_svg)
+    if repl_base64:
+        html = replace_base64_images(html, new_img)
+
+    return html
+
+
+def generate_response(html_file: str, max_tokens: int, temperature: float, top_p: float, model_gen: str,
+                      instruction: str = None, schema:str=None):
+    """
+    最重要的部分，生成 Markdown
+
+    :param html_file: 将要转换的 HTML 路径
+    :param max_tokens: 最大 token 数量
+    :param temperature: 温度
+    :param top_p: top_p
+    :param model_gen: 模型代数
+    :param instruction: 自定义提示词，仅适用于第二代模型
+    :param schema: 自定义输出 JSON 格式
+
+    :return: output: Markdown
+    """
     global model, stop_gen
     stop_gen = False
     html_path = os.path.join('html', html_file)
     html_loaded = load_html_file(html_path)
     if model is None:
         return "模型未加载"
-    input_text = f"<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user: \n{html_loaded}<|im_end|>\nassistant:"
+    # 构建提示词
+    if model_gen == "2":
+        if not instruction:
+            instruction = "<|im_start|>system\nExtract the main content from the given HTML and convert it to Markdown format.<|im_end|>"
+        if schema:
+            instruction = "<|im_start|>system\nExtract the specified information from a list of news threads and present it in a structured JSON format.<|im_end|>"
+            prompt = f"{instruction}\n<|im_start|>user:```html\n{html_loaded}\n```\nThe JSON schema is as follows:```json\n{schema}\n```<|im_end|>\nassistant:"
+        else:
+            prompt = f"{instruction}\n<|im_start|>user:```html\n{html_loaded}\n```<|im_end|>\nassistant:"
+        input_text = prompt
+    else:
+        input_text = f"<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user: \n{html_loaded}<|im_end|>\nassistant:"
+    # 流式生成
     temp = model(input_text, max_tokens=max_tokens, temperature=temperature, top_p=top_p, stream=True)
     output = ""
     for chunk in temp:
@@ -97,6 +169,17 @@ def copy(content):
     pyperclip.copy(content)
 
 
+def show_repl_svg(repl):
+    return gr.Textbox(interactive=True, label="替换后的 SVG", visible=True) if repl else gr.Textbox(interactive=True,
+                                                                                                    label="替换后的 SVG",
+                                                                                                    visible=False)
+
+
+def show_repl_img(repl):
+    return gr.Textbox(interactive=True, label="替换后的图片", visible=True) if repl else gr.Textbox(interactive=True,
+                                                                                                    label="替换后的图片",
+                                                                                                    visible=False)
+
 with gr.Blocks(theme=theme) as demo:
     gr.Markdown("## ReaderLM WebUI")
 
@@ -112,21 +195,19 @@ with gr.Blocks(theme=theme) as demo:
                     stop_button = gr.Button("停止生成")
                     copy_button = gr.Button("复制")
                 output_text = gr.Textbox(label="Markdown", interactive=False, lines=20)
-
     with gr.Tab("Markdown"):
         render_button = gr.Button("渲染 Markdown")
         output_md = gr.Markdown("")
-
     with gr.Tab("HTML"):
         html_render_button = gr.Button("渲染 HTML")
         output_html = gr.HTML("")
-
     with gr.Tab("设置"):
         gr.Markdown("模型设置")
         with gr.Row():
             n_gpu_layers_input = gr.Number(label="GPU 层数", value=-1)
             model_files = scan_models()
             model_file_dropdown = gr.Dropdown(label="选择模型", choices=model_files)
+            model_type = gr.Dropdown(label="模型代数", choices=["1", "2"], value="1", interactive=True)
         with gr.Row():
             unload_model_button = gr.Button("卸载模型")
             load_model_button = gr.Button("加载模型", variant="primary")
@@ -138,6 +219,32 @@ with gr.Blocks(theme=theme) as demo:
         with gr.Row():
             temperature_input = gr.Number(label="Temperature", value=0.8)
             top_p_input = gr.Number(label="Top P", value=0.95)
+        gr.Markdown("HTML 设置 - 正在施工，暂时不可用")
+        with gr.Row():
+            clean_html_cbox = gr.Checkbox(interactive=True, value=True, label="清理 HTML")
+            repl_svg = gr.Checkbox(interactive=True, value=False, label="替换 SVG")
+            repl_img = gr.Checkbox(interactive=True, value=False, label="替换 Base64 形式的图片")
+        with gr.Row():
+            new_svg = gr.Textbox(interactive=True, label="替换后的 SVG", visible=False)
+            new_img = gr.Textbox(interactive=True, label="替换后的图片", visible=False)
+        gr.Markdown("指令设置 - 只对第二代模型生效，两个设置互斥，同时只有一个生效")
+        with gr.Row():
+            custom_instruction = gr.Textbox(interactive=True, label="自定义提示词")
+            json_schema = gr.Textbox(interactive=True, label="自定义输出 JSON 格式")
+
+
+
+    repl_svg.change(
+        fn=show_repl_svg,
+        inputs=repl_svg,
+        outputs=new_svg
+    )
+
+    repl_img.change(
+        fn=show_repl_img,
+        inputs=repl_img,
+        outputs=new_img
+    )
 
     load_model_button.click(
         fn=lambda model_file, n_gpu_layers, n_ctx: load_model(
@@ -150,7 +257,7 @@ with gr.Blocks(theme=theme) as demo:
     generate_button.click(
         fn=generate_response,
         inputs=[
-            html_file, max_tokens_input, temperature_input, top_p_input
+            html_file, max_tokens_input, temperature_input, top_p_input, model_type, custom_instruction, json_schema
         ],
         outputs=output_text
     )
