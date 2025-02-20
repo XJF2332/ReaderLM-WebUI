@@ -120,20 +120,28 @@ def generate_response(html_file: str, max_tokens: int, temperature: float, top_p
     # 构建提示词
     if model_gen == "2":
         if not instruction:
-            instruction = "<|im_start|>system\nExtract the main content from the given HTML and convert it to Markdown format.<|im_end|>"
+            instruction = "Extract the main content from the given HTML and convert it to Markdown format."
         if schema:
-            instruction = "<|im_start|>system\nExtract the specified information from a list of news threads and present it in a structured JSON format.<|im_end|>"
-            prompt = f"{instruction}\n<|im_start|>user:```html\n{html_loaded}\n```\nThe JSON schema is as follows:```json\n{schema}\n```<|im_end|>\nassistant:"
+            instruction = "Extract the specified information from a list of news threads and present it in a structured JSON format."
+            prompt = f"{instruction}\n```html\n{html_loaded}\n```\nThe JSON schema is as follows:```json\n{schema}\n```"
         else:
-            prompt = f"{instruction}\n<|im_start|>user:```html\n{html_loaded}\n```<|im_end|>\nassistant:"
+            prompt = f"{instruction}\n```html\n{html_loaded}\n```"
         input_text = prompt
     else:
-        input_text = f"<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user: \n{html_loaded}<|im_end|>\nassistant:"
+        input_text = f"{html_loaded}"
+    message = [
+        {
+            "role":"user",
+            "content":input_text
+        }
+    ]
     # 流式生成
-    temp = model(input_text, max_tokens=max_tokens, temperature=temperature, top_p=top_p, stream=True)
+    temp = model.create_chat_completion(messages=message, max_tokens=max_tokens, temperature=temperature, top_p=top_p, stream=True)
     output = ""
     for chunk in temp:
-        output += chunk["choices"][0]["text"]
+        if not "content" in chunk["choices"][0]["delta"]:
+            continue
+        output += chunk["choices"][0]["delta"]["content"]
         if stop_gen:  # 检测stop_gen是否为真
             break
         yield output
