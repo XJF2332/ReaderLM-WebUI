@@ -49,6 +49,7 @@ def load_model(model_path, n_gpu_layers, n_ctx):
     return f"模型 '{model_path}' 已成功加载"
 
 
+
 def generate_response(html_file, max_tokens, temperature, top_p):
     global model, stop_gen
     stop_gen = False

@@ -4,6 +4,8 @@
 
 ![img.png](img.png)
 
+注意：本仓库的代码部分采用 MIT 协议，但模型仍然保留 CC-BY-NC-4.0 （ReaderLM 的许可证）
+
 ## 开发计划
 
 - [ ] 英文本地化 / Localize (English)
