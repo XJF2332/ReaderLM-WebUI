@@ -9,7 +9,7 @@
 ## 开发计划
 
 - [ ] 英文本地化 / Localize (English)
-- [ ] V2 模型的完整支持（当前版本仍然能够使用V2模型，只是效果可能没那么好）
+- [x] V2 模型的完整支持（当前版本仍然能够使用V2模型，只是效果可能没那么好）
 - [ ] 在转换前清理 HTML
 
 ## 部署
@@ -19,9 +19,10 @@
 你需要以下库：
 
 ```text
+charset_normalizer
 llama-cpp-python
-pyperclip
 gradio
+pyperclip
 ```
 
 ### 下载模型

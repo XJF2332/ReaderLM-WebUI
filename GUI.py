@@ -1,6 +1,8 @@
 import os
 import re
+from typing import Any, Generator
 
+import charset_normalizer
 import gradio as gr
 import pyperclip
 from llama_cpp import Llama
@@ -33,8 +35,11 @@ def stop_generate():
 
 
 def load_html_file(file_path):
-    with open(file_path, 'r', encoding='utf-8') as file:
-        return file.read()
+    with open(file_path, 'rb') as file:
+        content_bytes = file.read()
+        encoding = charset_normalizer.detect(content_bytes)
+    with open(file_path, 'r', encoding=encoding['encoding']) as f:
+        return f.read()
 
 
 def unload_model():
@@ -96,27 +101,39 @@ def clean_html(html: str, repl_svg: bool = False, repl_base64: bool = False, new
     return html
 
 
-def generate_response(html_file: str, max_tokens: int, temperature: float, top_p: float, model_gen: str,
-                      instruction: str = None, schema:str=None):
+def generate_response(html_path: str, max_tokens: int, temperature: float, top_p: float, model_gen: str,
+                      instruction: str, schema: str, html_clean: bool, repl_svg: bool, repl_base64: bool, new_svg: str,
+                      new_img: str) -> Generator[str | Any, Any, str | Any]:
     """
     最重要的部分，生成 Markdown
 
-    :param html_file: 将要转换的 HTML 路径
+    :param html_path: 将要转换的 HTML 路径
     :param max_tokens: 最大 token 数量
     :param temperature: 温度
     :param top_p: top_p
     :param model_gen: 模型代数
     :param instruction: 自定义提示词，仅适用于第二代模型
     :param schema: 自定义输出 JSON 格式
+    :param html_clean: 是否预清理 HTML 内容
+    :param repl_svg: 是否替换 SVG
+    :param repl_base64: 是否替换 base64 形式的图片
+    :param new_svg: 新的 SVG
+    :param new_img: 新的图片
 
     :return: output: Markdown
     """
     global model, stop_gen
     stop_gen = False
-    html_path = os.path.join('html', html_file)
+    html_path = os.path.join('html', html_path)
     html_loaded = load_html_file(html_path)
+
+    if html_clean:
+        html_loaded = clean_html(html=html_loaded, repl_svg=repl_svg, repl_base64=repl_base64, new_svg=new_svg,
+                                 new_img=new_img)
+
     if model is None:
         return "模型未加载"
+
     # 构建提示词
     if model_gen == "2":
         if not instruction:
@@ -148,7 +165,10 @@ def generate_response(html_file: str, max_tokens: int, temperature: float, top_p
     return output
 
 
-def deliver(text):
+def md_deliver(text):
+    return text
+
+def html_deliver(text):
     return text
 
 
@@ -264,14 +284,13 @@ with gr.Blocks(theme=theme) as demo:
 
     generate_button.click(
         fn=generate_response,
-        inputs=[
-            html_file, max_tokens_input, temperature_input, top_p_input, model_type, custom_instruction, json_schema
-        ],
+        inputs=[html_file, max_tokens_input, temperature_input, top_p_input, model_type, custom_instruction,
+                json_schema, clean_html_cbox, repl_svg, repl_img, new_svg, new_img],
         outputs=output_text
     )
 
     render_button.click(
-        fn=deliver,
+        fn=md_deliver,
         inputs=output_text,
         outputs=output_md
     )
@@ -283,7 +302,7 @@ with gr.Blocks(theme=theme) as demo:
     )
 
     html_render_button.click(
-        fn=deliver,
+        fn=html_deliver,
         inputs=html_preview,
         outputs=output_html
     )
