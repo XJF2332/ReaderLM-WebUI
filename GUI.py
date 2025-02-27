@@ -171,7 +171,6 @@ def md_deliver(text):
 def html_deliver(text):
     return text
 
-
 def update_html_prev(html_file):
     try:
         html_path = os.path.join('html', html_file)
@@ -182,15 +181,20 @@ def update_html_prev(html_file):
         html_prev = gr.Markdown("")
         return html_prev
 
-
 def scan_models():
-    file_list = []  # 创建一个空列表来存储文件路径
+    return [f for f in os.listdir("models") if f.lower().endswith(".gguf")]
 
-    for item in os.listdir('models'):
-        if item.endswith('.gguf'):  # 如果发现目标文件扩展名，直接添加到列表中
-            file_list.append(os.path.join(item))
 
-    return file_list  # 函数结束时返回完整的文件路径列表
+def refresh_model_list(current_seletion):
+    file_list = [f for f in os.listdir("models") if f.lower().endswith(".gguf")]
+    if current_seletion in file_list:
+        new_seletion = current_seletion
+    elif file_list != []:
+        new_seletion = file_list[0]
+    else:
+        new_seletion = None
+
+    return gr.Dropdown(label="选择模型", choices=file_list, interactive=True, value=new_seletion)
 
 
 def copy(content):
@@ -237,8 +241,9 @@ with gr.Blocks(theme=theme) as demo:
             model_file_dropdown = gr.Dropdown(label="选择模型", choices=model_files)
             model_type = gr.Dropdown(label="模型代数", choices=["1", "2"], value="1", interactive=True)
         with gr.Row():
-            unload_model_button = gr.Button("卸载模型")
-            load_model_button = gr.Button("加载模型", variant="primary")
+            load_model_button = gr.Button("加载模型", variant="primary", scale=10)
+            refresh_models_list_btn = gr.Button("🔄", min_width=10, scale=1)
+            unload_model_button = gr.Button("卸载模型", scale=10)
         model_load_info = gr.Markdown("")
         gr.Markdown("生成设置")
         with gr.Row():
@@ -247,7 +252,7 @@ with gr.Blocks(theme=theme) as demo:
         with gr.Row():
             temperature_input = gr.Number(label="Temperature", value=0.8)
             top_p_input = gr.Number(label="Top P", value=0.95)
-        gr.Markdown("HTML 设置 - 正在施工，暂时不可用")
+        gr.Markdown("HTML 设置")
         with gr.Row():
             clean_html_cbox = gr.Checkbox(interactive=True, value=True, label="清理 HTML")
             repl_svg = gr.Checkbox(interactive=True, value=False, label="替换 SVG")
@@ -317,6 +322,12 @@ with gr.Blocks(theme=theme) as demo:
         fn=copy,
         inputs=output_text,
         outputs=None
+    )
+
+    refresh_models_list_btn.click(
+        fn=refresh_model_list,
+        inputs=model_file_dropdown,
+        outputs=model_file_dropdown
     )
 
 demo.launch()

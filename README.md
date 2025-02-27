@@ -10,7 +10,7 @@
 
 - [ ] 英文本地化 / Localize (English)
 - [x] V2 模型的完整支持
-- [ ] 在转换前清理 HTML
+- [x] 在转换前清理 HTML
 
 ## 部署
 
@@ -35,4 +35,3 @@ pyperclip
 ```commandline
 python .\GUI.py
 ```
-
