@@ -148,12 +148,13 @@ def generate_response(html_path: str, max_tokens: int, temperature: float, top_p
         input_text = f"{html_loaded}"
     message = [
         {
-            "role":"user",
-            "content":input_text
+            "role": "user",
+            "content": input_text
         }
     ]
     # 流式生成
-    temp = model.create_chat_completion(messages=message, max_tokens=max_tokens, temperature=temperature, top_p=top_p, stream=True)
+    temp = model.create_chat_completion(messages=message, max_tokens=max_tokens, temperature=temperature, top_p=top_p,
+                                        stream=True)
     output = ""
     for chunk in temp:
         if not "content" in chunk["choices"][0]["delta"]:
@@ -168,8 +169,10 @@ def generate_response(html_path: str, max_tokens: int, temperature: float, top_p
 def md_deliver(text):
     return text
 
+
 def html_deliver(text):
     return text
+
 
 def update_html_prev(html_file):
     try:
@@ -180,6 +183,7 @@ def update_html_prev(html_file):
     except:
         html_prev = gr.Markdown("")
         return html_prev
+
 
 def scan_models():
     return [f for f in os.listdir("models") if f.lower().endswith(".gguf")]
@@ -211,6 +215,7 @@ def show_repl_img(repl):
     return gr.Textbox(interactive=True, label="替换后的图片", visible=True) if repl else gr.Textbox(interactive=True,
                                                                                                     label="替换后的图片",
                                                                                                     visible=False)
+
 
 with gr.Blocks(theme=theme) as demo:
     gr.Markdown("## ReaderLM WebUI")
@@ -264,8 +269,6 @@ with gr.Blocks(theme=theme) as demo:
         with gr.Row():
             custom_instruction = gr.Textbox(interactive=True, label="自定义提示词")
             json_schema = gr.Textbox(interactive=True, label="自定义输出 JSON 格式")
-
-
 
     repl_svg.change(
         fn=show_repl_svg,

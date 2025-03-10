@@ -4,11 +4,14 @@
 
 ![img.png](img.png)
 
+[English Version](README-en.md)
+
 注意：本仓库的代码部分采用 MIT 协议，但模型仍然保留 CC-BY-NC-4.0 （ReaderLM 的许可证）
 
 ## 开发计划
 
 - [ ] 英文本地化 / Localize (English)
+- [ ] 自动检测模型代数
 - [x] V2 模型的完整支持
 - [x] 在转换前清理 HTML
 
