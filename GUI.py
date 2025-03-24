@@ -55,7 +55,9 @@ def load_model(model_path, n_gpu_layers, n_ctx):
     return f"模型 '{model_path}' 已成功加载"
 
 
-def clean_html(html: str, repl_svg: bool = False, repl_base64: bool = False, new_svg: str = "this is a placeholder",
+def clean_html(html: str, repl_svg: bool = False,
+               repl_base64: bool = False,
+               new_svg: str = "this is a placeholder",
                new_img: str = "#") -> str:
     # 匹配模式
     script = r"<[ ]*script.*?\/[ ]*script[ ]*>"
@@ -100,10 +102,22 @@ def clean_html(html: str, repl_svg: bool = False, repl_base64: bool = False, new
 
     return html
 
+def cal_token_count(html_path: str) -> str:
+    if html_path is not None:
+        html = load_html_file(html_path)
+        tokens = model.tokenize(html.encode('utf-8'))
+        tokens_cleaned = model.tokenize(clean_html(html).encode('utf-8'))
+        return f"Token 数量：{len(tokens)}  \n预清理 HTML 后的 Token 数量：{len(tokens_cleaned)}"
+    else:
+        return "文本为空"
 
-def generate_response(html_path: str, max_tokens: int, temperature: float, top_p: float, model_gen: str,
-                      instruction: str, schema: str, html_clean: bool, repl_svg: bool, repl_base64: bool, new_svg: str,
-                      new_img: str) -> Generator[str | Any, Any, str | Any]:
+
+def generate_response(html_path: str, max_tokens: int,
+                      temperature: float, top_p: float,
+                      model_gen: str, instruction: str,
+                      schema: str, html_clean: bool,
+                      repl_svg: bool, repl_base64: bool,
+                      new_svg: str, new_img: str) -> Generator[str | Any, Any, str | Any]:
     """
     最重要的部分，生成 Markdown
 
@@ -223,9 +237,11 @@ with gr.Blocks(theme=theme) as demo:
     with gr.Tab("生成"):
         with gr.Row():
             with gr.Column():
+                token_count = gr.Markdown()
                 html_file = gr.File(label="选择 HTML 文件", file_count="single", file_types=[".html"], type="filepath")
                 html_preview = gr.Markdown()
                 html_file.change(update_html_prev, inputs=html_file, outputs=html_preview)
+                html_file.change(cal_token_count, inputs=html_file, outputs=token_count)
             with gr.Column():
                 with gr.Row():
                     generate_button = gr.Button("转换为 Markdown", variant="primary")
