@@ -181,7 +181,11 @@ def generate_response(html_path: str, max_tokens: int,
 
 
 def md_deliver(text):
-    return text
+    lines = text.split("\n")
+    if lines[0] == "```" and lines[-1] == "```" and len(lines) >= 2:
+        return "\n".join(lines[1:-1])
+    else:
+        return text
 
 
 def html_deliver(text):
