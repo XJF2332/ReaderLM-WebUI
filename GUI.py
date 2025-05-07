@@ -102,12 +102,29 @@ def clean_html(html: str, repl_svg: bool = False,
 
     return html
 
-def cal_token_count(html_path: str) -> str:
+def cal_token_count(html_path: str, max_tokens: int) -> str:
     if html_path is not None:
         html = load_html_file(html_path)
         tokens = model.tokenize(html.encode('utf-8'))
         tokens_cleaned = model.tokenize(clean_html(html).encode('utf-8'))
-        return f"Token 数量：{len(tokens)}  \n预清理 HTML 后的 Token 数量：{len(tokens_cleaned)}"
+        tokens_count = len(tokens)
+        tokens_count_cleaned = len(tokens_cleaned)
+        if tokens_count_cleaned > max_tokens:
+            return \
+f"""⚠️HTML 过长，尝试减少文件长度或增加上下文长度⚠️
+Token 数量：{tokens_count}
+预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}"""
+        elif tokens_count > max_tokens > tokens_count_cleaned:
+            return \
+f"""⚠️HTML 过长，需要预清理⚠️
+Token 数量：{tokens_count}
+预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}"""
+        else:
+            return \
+f"""
+Token 数量：{tokens_count}
+预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}
+"""
     else:
         return "文本为空"
 
@@ -207,16 +224,16 @@ def scan_models():
     return [f for f in os.listdir("models") if f.lower().endswith(".gguf")]
 
 
-def refresh_model_list(current_seletion):
-    file_list = [f for f in os.listdir("models") if f.lower().endswith(".gguf")]
-    if current_seletion in file_list:
-        new_seletion = current_seletion
-    elif file_list != []:
-        new_seletion = file_list[0]
+def refresh_model_list(current_selection):
+    file_list = scan_models()
+    if current_selection in file_list:
+        new_selection = current_selection
+    elif file_list:
+        new_selection = file_list[0]
     else:
-        new_seletion = None
+        new_selection = None
 
-    return gr.Dropdown(label="选择模型", choices=file_list, interactive=True, value=new_seletion)
+    return gr.Dropdown(label="选择模型", choices=file_list, interactive=True, value=new_selection)
 
 
 def copy(content):
@@ -224,15 +241,19 @@ def copy(content):
 
 
 def show_repl_svg(repl):
-    return gr.Textbox(interactive=True, label="替换后的 SVG", visible=True) if repl else gr.Textbox(interactive=True,
-                                                                                                    label="替换后的 SVG",
-                                                                                                    visible=False)
+    return gr.Textbox(interactive=True,
+                      label="替换后的 SVG",
+                      visible=True) if repl else gr.Textbox(interactive=True,
+                                                            label="替换后的 SVG",
+                                                            visible=False)
 
 
 def show_repl_img(repl):
-    return gr.Textbox(interactive=True, label="替换后的图片", visible=True) if repl else gr.Textbox(interactive=True,
-                                                                                                    label="替换后的图片",
-                                                                                                    visible=False)
+    return gr.Textbox(interactive=True,
+                      label="替换后的图片",
+                      visible=True) if repl else gr.Textbox(interactive=True,
+                                                            label="替换后的图片",
+                                                            visible=False)
 
 
 with gr.Blocks(theme=theme) as demo:
@@ -244,8 +265,6 @@ with gr.Blocks(theme=theme) as demo:
                 token_count = gr.Markdown()
                 html_file = gr.File(label="选择 HTML 文件", file_count="single", file_types=[".html"], type="filepath")
                 html_preview = gr.Markdown()
-                html_file.change(update_html_prev, inputs=html_file, outputs=html_preview)
-                html_file.change(cal_token_count, inputs=html_file, outputs=token_count)
             with gr.Column():
                 with gr.Row():
                     generate_button = gr.Button("转换为 Markdown", variant="primary")
@@ -300,6 +319,18 @@ with gr.Blocks(theme=theme) as demo:
         fn=show_repl_img,
         inputs=repl_img,
         outputs=new_img
+    )
+
+    html_file.change(
+        update_html_prev,
+        inputs=html_file,
+        outputs=html_preview
+    )
+
+    html_file.change(
+        cal_token_count,
+        inputs=[html_file, n_ctx_input],
+        outputs=token_count
     )
 
     load_model_button.click(
