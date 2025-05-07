@@ -25,6 +25,7 @@ You need these packages:
 charset_normalizer
 llama-cpp-python
 gradio
+requests
 pyperclip
 ```
 

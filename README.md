@@ -25,6 +25,7 @@
 charset_normalizer
 llama-cpp-python
 gradio
+requests
 pyperclip
 ```
 

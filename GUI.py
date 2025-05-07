@@ -4,6 +4,7 @@ from typing import Any, Generator
 
 import charset_normalizer
 import gradio as gr
+import requests
 import pyperclip
 from llama_cpp import Llama
 
@@ -27,6 +28,22 @@ theme = gr.themes.Base(
     checkbox_background_color='*primary_50',
     checkbox_background_color_focus='*primary_200'
 )
+
+
+def get_html(url: str) -> str:
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    try:
+        # 发送带请求头的GET请求
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        html = response.text
+        return html
+    except requests.exceptions.HTTPError as e:
+        return f"HTTP错误: 状态码 {e.response.status_code}"
+    except requests.exceptions.RequestException as e:
+        return f"请求失败: {e}"
+    except Exception as e:
+        return f"其他错误: {e}"
 
 
 def stop_generate():
@@ -116,9 +133,8 @@ def clean_html(html: str, repl_svg: bool = False,
     return html
 
 
-def cal_token_count(html_path: str, max_tokens: int) -> str:
-    if html_path is not None:
-        html = load_html_file(html_path)
+def cal_token_count(html: str, max_tokens: int) -> str:
+    if html is not None:
         tokens = model.tokenize(html.encode('utf-8'))
         tokens_cleaned = model.tokenize(clean_html(html).encode('utf-8'))
         tokens_count = len(tokens)
@@ -143,7 +159,7 @@ Token 数量：{tokens_count}
         return "文本为空"
 
 
-def generate_response(html_path: str, max_tokens: int,
+def generate_response(html_content: str, max_tokens: int,
                       temperature: float, top_p: float,
                       model_gen: str, instruction: str,
                       schema: str, html_clean: bool,
@@ -152,7 +168,7 @@ def generate_response(html_path: str, max_tokens: int,
     """
     最重要的部分，生成 Markdown
 
-    :param html_path: 将要转换的 HTML 路径
+    :param html_content: 将要转换的 HTML 路径
     :param max_tokens: 最大 token 数量
     :param temperature: 温度
     :param top_p: top_p
@@ -169,11 +185,9 @@ def generate_response(html_path: str, max_tokens: int,
     """
     global model, stop_gen
     stop_gen = False
-    html_path = os.path.join('html', html_path)
-    html_loaded = load_html_file(html_path)
 
     if html_clean:
-        html_loaded = clean_html(html=html_loaded, repl_svg=repl_svg, repl_base64=repl_base64, new_svg=new_svg,
+        html_content = clean_html(html=html_content, repl_svg=repl_svg, repl_base64=repl_base64, new_svg=new_svg,
                                  new_img=new_img)
 
     if model is None:
@@ -185,12 +199,12 @@ def generate_response(html_path: str, max_tokens: int,
             instruction = "Extract the main content from the given HTML and convert it to Markdown format."
         if schema:
             instruction = "Extract the specified information from a list of news threads and present it in a structured JSON format."
-            prompt = f"{instruction}\n```html\n{html_loaded}\n```\nThe JSON schema is as follows:```json\n{schema}\n```"
+            prompt = f"{instruction}\n```html\n{html_content}\n```\nThe JSON schema is as follows:```json\n{schema}\n```"
         else:
-            prompt = f"{instruction}\n```html\n{html_loaded}\n```"
+            prompt = f"{instruction}\n```html\n{html_content}\n```"
         input_text = prompt
     else:
-        input_text = f"{html_loaded}"
+        input_text = f"{html_content}"
     message = [
         {
             "role": "user",
@@ -223,15 +237,14 @@ def html_deliver(text: str) -> str:
     return text
 
 
-def update_html_prev(html_file: str) -> gr.components.markdown.Markdown:
-    try:
+def update_html_prev(html_file: str, html_url: str) -> (gr.components.markdown.Markdown, str):
+    html_content = ""
+    if html_file and not html_url:
         html_path = os.path.join('html', html_file)
-        html_loaded = load_html_file(html_path)
-        html_prev = gr.Markdown(html_loaded)
-        return html_prev
-    except:
-        html_prev = gr.Markdown("")
-        return html_prev
+        html_content = load_html_file(html_path)
+    elif html_url:
+        html_content = get_html(html_url)
+    return gr.Markdown(html_content), html_content
 
 
 def scan_models() -> list:
@@ -272,12 +285,15 @@ def show_repl_img(repl:bool) -> gr.components.textbox.Textbox:
 
 with gr.Blocks(theme=theme) as demo:
     gr.Markdown("## ReaderLM WebUI")
+    html_content_store = gr.State()
 
     with gr.Tab("生成"):
         with gr.Row():
             with gr.Column():
                 token_count = gr.Markdown()
-                html_file = gr.File(label="选择 HTML 文件", file_count="single", file_types=[".html"], type="filepath")
+                html_url = gr.Textbox(label="输入 URL")
+                commit_url = gr.Button("提交 URL")
+                html_file = gr.File(label="或选择 HTML 文件", file_count="single", file_types=[".html"], type="filepath")
                 html_preview = gr.Markdown()
             with gr.Column():
                 with gr.Row():
@@ -289,12 +305,13 @@ with gr.Blocks(theme=theme) as demo:
         render_button = gr.Button("渲染 Markdown")
         output_md = gr.Markdown("")
     with gr.Tab("HTML"):
+        html_render_warning = gr.Markdown("HTML 中的 CSS 可能会对 UI 产生意料之外的影响，请谨慎加载")
         html_render_button = gr.Button("渲染 HTML")
         output_html = gr.HTML("")
     with gr.Tab("设置"):
         gr.Markdown("模型设置")
         with gr.Row():
-            n_gpu_layers_input = gr.Number(label="GPU 层数", value=-1)
+            n_gpu_layers_input = gr.Number(label="GPU 层数", value=-1, maximum=128, minimum=-1)
             model_files = scan_models()
             model_file_dropdown = gr.Dropdown(label="选择模型", choices=model_files)
             model_type = gr.Dropdown(label="模型代数", choices=["1", "2"], value="1", interactive=True)
@@ -305,11 +322,11 @@ with gr.Blocks(theme=theme) as demo:
         model_load_info = gr.Markdown("")
         gr.Markdown("生成设置")
         with gr.Row():
-            n_ctx_input = gr.Number(label="上下文长度", value=204800)
-            max_tokens_input = gr.Number(label="最大新分配 token 数量", value=102400)
+            n_ctx_input = gr.Number(label="上下文长度", value=204800, minimum=1)
+            max_tokens_input = gr.Number(label="最大新分配 token 数量", value=102400, minimum=1)
         with gr.Row():
-            temperature_input = gr.Number(label="Temperature", value=0.8)
-            top_p_input = gr.Number(label="Top P", value=0.95)
+            temperature_input = gr.Number(label="Temperature", value=0.8, minimum=0)
+            top_p_input = gr.Number(label="Top P", value=0.95, minimum=0, maximum=1)
         gr.Markdown("HTML 设置")
         with gr.Row():
             clean_html_cbox = gr.Checkbox(interactive=True, value=True, label="清理 HTML")
@@ -337,13 +354,19 @@ with gr.Blocks(theme=theme) as demo:
 
     html_file.change(
         update_html_prev,
-        inputs=html_file,
-        outputs=html_preview
+        inputs=[html_file, html_url],
+        outputs=[html_preview, html_content_store]
     )
 
-    html_file.change(
-        cal_token_count,
-        inputs=[html_file, n_ctx_input],
+    commit_url.click(
+        update_html_prev,
+        inputs=[html_file, html_url],
+        outputs=[html_preview, html_content_store]
+    )
+
+    html_content_store.change(
+        fn=cal_token_count,
+        inputs=[html_content_store, max_tokens_input],
         outputs=token_count
     )
 
@@ -357,7 +380,7 @@ with gr.Blocks(theme=theme) as demo:
 
     generate_button.click(
         fn=generate_response,
-        inputs=[html_file, max_tokens_input, temperature_input, top_p_input, model_type, custom_instruction,
+        inputs=[html_preview, max_tokens_input, temperature_input, top_p_input, model_type, custom_instruction,
                 json_schema, clean_html_cbox, repl_svg, repl_img, new_svg, new_img],
         outputs=output_text
     )
