@@ -4,8 +4,8 @@ from typing import Any, Generator
 
 import charset_normalizer
 import gradio as gr
-import requests
 import pyperclip
+import requests
 from llama_cpp import Llama
 
 model = None
@@ -134,29 +134,33 @@ def clean_html(html: str, repl_svg: bool = False,
 
 
 def cal_token_count(html: str, max_tokens: int) -> str:
-    if html is not None:
-        tokens = model.tokenize(html.encode('utf-8'))
-        tokens_cleaned = model.tokenize(clean_html(html).encode('utf-8'))
-        tokens_count = len(tokens)
-        tokens_count_cleaned = len(tokens_cleaned)
-        if tokens_count_cleaned > max_tokens:
-            return \
-                f"""⚠️HTML 过长，尝试减少文件长度或增加上下文长度⚠️  
-Token 数量：{tokens_count}  
-预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}"""
-        elif tokens_count > max_tokens >= tokens_count_cleaned:
-            return \
-                f"""⚠️HTML 过长，需要预清理⚠️  
-Token 数量：{tokens_count}  
-预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}"""
-        else:
-            return \
-                f"""
-Token 数量：{tokens_count}  
-预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}
-"""
+    global model
+    if model is None:
+        return "未加载模型，无法计算 Token 数量"
     else:
-        return "文本为空"
+        if html is not None:
+            tokens = model.tokenize(html.encode('utf-8'))
+            tokens_cleaned = model.tokenize(clean_html(html).encode('utf-8'))
+            tokens_count = len(tokens)
+            tokens_count_cleaned = len(tokens_cleaned)
+            if tokens_count_cleaned > max_tokens:
+                return \
+                    f"""⚠️HTML 过长，尝试减少文件长度或增加上下文长度⚠️  
+    Token 数量：{tokens_count}  
+    预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}"""
+            elif tokens_count > max_tokens >= tokens_count_cleaned:
+                return \
+                    f"""⚠️HTML 过长，需要预清理⚠️  
+    Token 数量：{tokens_count}  
+    预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}"""
+            else:
+                return \
+                    f"""
+    Token 数量：{tokens_count}  
+    预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}
+    """
+        else:
+            return "文本为空"
 
 
 def generate_response(html_content: str, max_tokens: int,
@@ -168,7 +172,7 @@ def generate_response(html_content: str, max_tokens: int,
     """
     最重要的部分，生成 Markdown
 
-    :param html_content: 将要转换的 HTML 路径
+    :param html_content: 将要转换的 HTML 内容
     :param max_tokens: 最大 token 数量
     :param temperature: 温度
     :param top_p: top_p
@@ -188,7 +192,7 @@ def generate_response(html_content: str, max_tokens: int,
 
     if html_clean:
         html_content = clean_html(html=html_content, repl_svg=repl_svg, repl_base64=repl_base64, new_svg=new_svg,
-                                 new_img=new_img)
+                                  new_img=new_img)
 
     if model is None:
         return "模型未加载"
@@ -212,8 +216,8 @@ def generate_response(html_content: str, max_tokens: int,
         }
     ]
     # 流式生成
-    temp = model.create_chat_completion(messages=message, max_tokens=max_tokens, temperature=temperature, top_p=top_p,
-                                        stream=True)
+    temp = model.create_chat_completion(messages=message, max_tokens=max_tokens,
+                                        temperature=temperature, top_p=top_p, stream=True)
     output = ""
     for chunk in temp:
         if not "content" in chunk["choices"][0]["delta"]:
@@ -227,8 +231,8 @@ def generate_response(html_content: str, max_tokens: int,
 
 def md_deliver(text: str) -> str:
     lines = text.split("\n")
-    if lines[0] == "```" and lines[-1] == "```" and len(lines) >= 2:
-        return "\n".join(lines[1:-1])
+    if lines[0] == "```markdown" and lines[-2] == "```" and len(lines) >= 2:
+        return "\n".join(lines[1:-2])
     else:
         return text
 
@@ -243,6 +247,7 @@ def update_html_prev(html_file: str, html_url: str) -> (gr.components.markdown.M
         html_path = os.path.join('html', html_file)
         html_content = load_html_file(html_path)
     elif html_url:
+        gr.Info("正在尝试读取 HTML，具体时间依网络状况而定")
         html_content = get_html(html_url)
     return gr.Markdown(html_content), html_content
 
@@ -263,11 +268,13 @@ def refresh_model_list(current_selection: str) -> gr.components.dropdown.Dropdow
     return gr.Dropdown(label="选择模型", choices=file_list, interactive=True, value=new_selection)
 
 
-def copy(content:str):
+def copy(content: str, remove_code_block: bool):
+    if remove_code_block:
+        content = md_deliver(content)
     pyperclip.copy(content)
 
 
-def show_repl_svg(repl: bool) -> gr.components.textbox.Textbox:
+def toggle_repl_svg(repl: bool) -> gr.components.textbox.Textbox:
     return gr.Textbox(interactive=True,
                       label="替换后的 SVG",
                       visible=True) if repl else gr.Textbox(interactive=True,
@@ -275,7 +282,7 @@ def show_repl_svg(repl: bool) -> gr.components.textbox.Textbox:
                                                             visible=False)
 
 
-def show_repl_img(repl:bool) -> gr.components.textbox.Textbox:
+def toggle_repl_img(repl: bool) -> gr.components.textbox.Textbox:
     return gr.Textbox(interactive=True,
                       label="替换后的图片",
                       visible=True) if repl else gr.Textbox(interactive=True,
@@ -293,7 +300,8 @@ with gr.Blocks(theme=theme) as demo:
                 token_count = gr.Markdown()
                 html_url = gr.Textbox(label="输入 URL")
                 commit_url = gr.Button("提交 URL")
-                html_file = gr.File(label="或选择 HTML 文件", file_count="single", file_types=[".html"], type="filepath")
+                html_file = gr.File(label="或选择 HTML 文件", file_count="single", file_types=[".html"],
+                                    type="filepath")
                 html_preview = gr.Markdown()
             with gr.Column():
                 with gr.Row():
@@ -327,6 +335,8 @@ with gr.Blocks(theme=theme) as demo:
         with gr.Row():
             temperature_input = gr.Number(label="Temperature", value=0.8, minimum=0)
             top_p_input = gr.Number(label="Top P", value=0.95, minimum=0, maximum=1)
+        remove_code_block = gr.Checkbox(interactive=True, value=True,
+                                        label="移除最外层的代码块（通常出现于 V2 模型）")
         gr.Markdown("HTML 设置")
         with gr.Row():
             clean_html_cbox = gr.Checkbox(interactive=True, value=True, label="清理 HTML")
@@ -341,13 +351,13 @@ with gr.Blocks(theme=theme) as demo:
             json_schema = gr.Textbox(interactive=True, label="自定义输出 JSON 格式")
 
     repl_svg.change(
-        fn=show_repl_svg,
+        fn=toggle_repl_svg,
         inputs=repl_svg,
         outputs=new_svg
     )
 
     repl_img.change(
-        fn=show_repl_img,
+        fn=toggle_repl_img,
         inputs=repl_img,
         outputs=new_img
     )
@@ -411,7 +421,7 @@ with gr.Blocks(theme=theme) as demo:
 
     copy_button.click(
         fn=copy,
-        inputs=output_text,
+        inputs=[output_text, remove_code_block],
         outputs=None
     )
 
