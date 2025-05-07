@@ -48,11 +48,22 @@ def unload_model():
     return "模型已卸载"
 
 
-def load_model(model_path, n_gpu_layers, n_ctx):
+def load_model(model_path:str, n_gpu_layers, n_ctx):
     global model
     model = None
     model = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
-    return f"模型 '{model_path}' 已成功加载"
+    metadata = model.metadata
+    if "general.version" in metadata.keys():
+        version = metadata["general.version"]
+        if version == "v2":
+            return f"模型 '{model_path}' 已成功加载", gr.Dropdown(
+                label="模型代数", choices=["1", "2"], value="2", interactive=True)
+        else:
+            return f"模型 '{model_path}' 已成功加载，但它看起来不像一代模型，也不像二代模型", gr.Dropdown(
+                label="模型代数", choices=["1", "2"], value="1", interactive=True)
+    else:
+        return f"模型 '{model_path}' 已成功加载", gr.Dropdown(
+            label="模型代数", choices=["1", "2"], value="1", interactive=True)
 
 
 def clean_html(html: str, repl_svg: bool = False,
@@ -111,18 +122,18 @@ def cal_token_count(html_path: str, max_tokens: int) -> str:
         tokens_count_cleaned = len(tokens_cleaned)
         if tokens_count_cleaned > max_tokens:
             return \
-f"""⚠️HTML 过长，尝试减少文件长度或增加上下文长度⚠️
-Token 数量：{tokens_count}
+f"""⚠️HTML 过长，尝试减少文件长度或增加上下文长度⚠️  
+Token 数量：{tokens_count}  
 预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}"""
-        elif tokens_count > max_tokens > tokens_count_cleaned:
+        elif tokens_count > max_tokens >= tokens_count_cleaned:
             return \
-f"""⚠️HTML 过长，需要预清理⚠️
-Token 数量：{tokens_count}
+f"""⚠️HTML 过长，需要预清理⚠️  
+Token 数量：{tokens_count}  
 预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}"""
         else:
             return \
 f"""
-Token 数量：{tokens_count}
+Token 数量：{tokens_count}  
 预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}
 """
     else:
@@ -338,7 +349,7 @@ with gr.Blocks(theme=theme) as demo:
             os.path.join('models', model_file), n_gpu_layers, n_ctx
         ),
         inputs=[model_file_dropdown, n_gpu_layers_input, n_ctx_input],
-        outputs=model_load_info
+        outputs=[model_load_info, model_type]
     )
 
     generate_button.click(
