@@ -34,7 +34,7 @@ def stop_generate():
     stop_gen = True
 
 
-def load_html_file(file_path):
+def load_html_file(file_path: str) -> str:
     with open(file_path, 'rb') as file:
         content_bytes = file.read()
         encoding = charset_normalizer.detect(content_bytes)
@@ -42,13 +42,15 @@ def load_html_file(file_path):
         return f.read()
 
 
-def unload_model():
+def unload_model() -> str:
     global model
     model = None
     return "模型已卸载"
 
 
-def load_model(model_path:str, n_gpu_layers, n_ctx):
+def load_model(model_path: str,
+               n_gpu_layers: int,
+               n_ctx: int) -> (str, gr.components.dropdown.Dropdown):
     global model
     model = None
     model = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
@@ -113,6 +115,7 @@ def clean_html(html: str, repl_svg: bool = False,
 
     return html
 
+
 def cal_token_count(html_path: str, max_tokens: int) -> str:
     if html_path is not None:
         html = load_html_file(html_path)
@@ -122,17 +125,17 @@ def cal_token_count(html_path: str, max_tokens: int) -> str:
         tokens_count_cleaned = len(tokens_cleaned)
         if tokens_count_cleaned > max_tokens:
             return \
-f"""⚠️HTML 过长，尝试减少文件长度或增加上下文长度⚠️  
+                f"""⚠️HTML 过长，尝试减少文件长度或增加上下文长度⚠️  
 Token 数量：{tokens_count}  
 预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}"""
         elif tokens_count > max_tokens >= tokens_count_cleaned:
             return \
-f"""⚠️HTML 过长，需要预清理⚠️  
+                f"""⚠️HTML 过长，需要预清理⚠️  
 Token 数量：{tokens_count}  
 预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}"""
         else:
             return \
-f"""
+                f"""
 Token 数量：{tokens_count}  
 预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}
 """
@@ -208,7 +211,7 @@ def generate_response(html_path: str, max_tokens: int,
     return output
 
 
-def md_deliver(text):
+def md_deliver(text: str) -> str:
     lines = text.split("\n")
     if lines[0] == "```" and lines[-1] == "```" and len(lines) >= 2:
         return "\n".join(lines[1:-1])
@@ -216,11 +219,11 @@ def md_deliver(text):
         return text
 
 
-def html_deliver(text):
+def html_deliver(text: str) -> str:
     return text
 
 
-def update_html_prev(html_file):
+def update_html_prev(html_file: str) -> gr.components.markdown.Markdown:
     try:
         html_path = os.path.join('html', html_file)
         html_loaded = load_html_file(html_path)
@@ -231,11 +234,11 @@ def update_html_prev(html_file):
         return html_prev
 
 
-def scan_models():
+def scan_models() -> list:
     return [f for f in os.listdir("models") if f.lower().endswith(".gguf")]
 
 
-def refresh_model_list(current_selection):
+def refresh_model_list(current_selection: str) -> gr.components.dropdown.Dropdown:
     file_list = scan_models()
     if current_selection in file_list:
         new_selection = current_selection
@@ -247,11 +250,11 @@ def refresh_model_list(current_selection):
     return gr.Dropdown(label="选择模型", choices=file_list, interactive=True, value=new_selection)
 
 
-def copy(content):
+def copy(content:str):
     pyperclip.copy(content)
 
 
-def show_repl_svg(repl):
+def show_repl_svg(repl: bool) -> gr.components.textbox.Textbox:
     return gr.Textbox(interactive=True,
                       label="替换后的 SVG",
                       visible=True) if repl else gr.Textbox(interactive=True,
@@ -259,7 +262,7 @@ def show_repl_svg(repl):
                                                             visible=False)
 
 
-def show_repl_img(repl):
+def show_repl_img(repl:bool) -> gr.components.textbox.Textbox:
     return gr.Textbox(interactive=True,
                       label="替换后的图片",
                       visible=True) if repl else gr.Textbox(interactive=True,
