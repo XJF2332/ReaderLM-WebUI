@@ -67,7 +67,7 @@ def unload_model() -> str:
 
 def load_model(model_path: str,
                n_gpu_layers: int,
-               n_ctx: int) -> (str, gr.components.dropdown.Dropdown):
+               n_ctx: int) -> tuple[str, gr.components.dropdown.Dropdown]:
     global model
     model = None
     model = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
@@ -241,7 +241,7 @@ def html_deliver(text: str) -> str:
     return text
 
 
-def update_html_prev(html_file: str, html_url: str) -> (gr.components.markdown.Markdown, str):
+def update_html_prev(html_file: str, html_url: str) -> tuple[gr.components.markdown.Markdown, str]:
     html_content = ""
     if html_file and not html_url:
         html_path = os.path.join('html', html_file)
