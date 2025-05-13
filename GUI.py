@@ -1,5 +1,6 @@
 import os
 import re
+import json
 from typing import Any, Generator
 
 import charset_normalizer
@@ -28,7 +29,6 @@ theme = gr.themes.Base(
     checkbox_background_color='*primary_50',
     checkbox_background_color_focus='*primary_200'
 )
-
 
 def get_html(url: str) -> str:
     headers = {'User-Agent': 'Mozilla/5.0'}

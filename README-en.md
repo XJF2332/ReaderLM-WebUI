@@ -10,7 +10,7 @@ Note: codes in this repo uses MIT license, but the model uses CC-BY-NC-4.0 (Lice
 
 ## Dev Plans
 
-- [ ] Localize (English)
+- [ ] Localization support
 - [x] Automatically detect model version
 - [x] Full support for V2 model
 - [x] Clean HTML before converting
