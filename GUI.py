@@ -376,7 +376,7 @@ with gr.Blocks(theme=theme) as demo:
 
     html_content_store.change(
         fn=cal_token_count,
-        inputs=[html_content_store, max_tokens_input],
+        inputs=[html_content_store, n_ctx_input],
         outputs=token_count
     )
 
