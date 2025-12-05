@@ -1,13 +1,11 @@
 import os
-import re
-import json
 from typing import Any, Generator
 
-import charset_normalizer
 import gradio as gr
 import pyperclip
-import requests
 from llama_cpp import Llama
+
+from backend import HTML
 
 model = None
 stop_gen = False
@@ -30,33 +28,10 @@ theme = gr.themes.Base(
     checkbox_background_color_focus='*primary_200'
 )
 
-def get_html(url: str) -> str:
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    try:
-        # 发送带请求头的GET请求
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        html = response.text
-        return html
-    except requests.exceptions.HTTPError as e:
-        return f"HTTP错误: 状态码 {e.response.status_code}"
-    except requests.exceptions.RequestException as e:
-        return f"请求失败: {e}"
-    except Exception as e:
-        return f"其他错误: {e}"
-
 
 def stop_generate():
     global stop_gen
     stop_gen = True
-
-
-def load_html_file(file_path: str) -> str:
-    with open(file_path, 'rb') as file:
-        content_bytes = file.read()
-        encoding = charset_normalizer.detect(content_bytes)
-    with open(file_path, 'r', encoding=encoding['encoding']) as f:
-        return f.read()
 
 
 def unload_model() -> str:
@@ -85,54 +60,6 @@ def load_model(model_path: str,
             label="模型代数", choices=["1", "2"], value="1", interactive=True)
 
 
-def clean_html(html: str, repl_svg: bool = False,
-               repl_base64: bool = False,
-               new_svg: str = "this is a placeholder",
-               new_img: str = "#") -> str:
-    # 匹配模式
-    script = r"<[ ]*script.*?\/[ ]*script[ ]*>"
-    style = r"<[ ]*style.*?\/[ ]*style[ ]*>"
-    meta = r"<[ ]*meta.*?>"
-    comment = r"<[ ]*!--.*?--[ ]*>"
-    link = r"<[ ]*link.*?>"
-    svg = r"(<svg[^>]*>)(.*?)(<\/svg>)"
-    base64_img = r'<img[^>]+src="data:image/[^;]+;base64,[^"]+"[^>]*>'
-
-    def replace_svg(html: str, new_content: str) -> str:
-        return re.sub(
-            svg,
-            lambda match: f"{match.group(1)}{new_content}{match.group(3)}",
-            html,
-            flags=re.DOTALL,
-        )
-
-    def replace_base64_images(html: str, new_image_src) -> str:
-        return re.sub(base64_img, f'<img src="{new_image_src}"/>', html)
-
-    html = re.sub(
-        script, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
-    )
-    html = re.sub(
-        style, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
-    )
-    html = re.sub(
-        meta, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
-    )
-    html = re.sub(
-        comment, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
-    )
-    html = re.sub(
-        link, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
-    )
-
-    if repl_svg:
-        html = replace_svg(html, new_svg)
-    if repl_base64:
-        html = replace_base64_images(html, new_img)
-
-    return html
-
-
 def cal_token_count(html: str, max_tokens: int) -> str:
     global model
     if model is None:
@@ -140,7 +67,7 @@ def cal_token_count(html: str, max_tokens: int) -> str:
     else:
         if html is not None:
             tokens = model.tokenize(html.encode('utf-8'))
-            tokens_cleaned = model.tokenize(clean_html(html).encode('utf-8'))
+            tokens_cleaned = model.tokenize(HTML.clean_html(html).encode('utf-8'))
             tokens_count = len(tokens)
             tokens_count_cleaned = len(tokens_cleaned)
             if tokens_count_cleaned > max_tokens:
@@ -191,8 +118,13 @@ def generate_response(html_content: str, max_tokens: int,
     stop_gen = False
 
     if html_clean:
-        html_content = clean_html(html=html_content, repl_svg=repl_svg, repl_base64=repl_base64, new_svg=new_svg,
-                                  new_img=new_img)
+        html_content = HTML.clean_html(
+            html=html_content,
+            repl_svg=repl_svg,
+            repl_base64=repl_base64,
+            new_svg=new_svg,
+            new_img=new_img
+        )
 
     if model is None:
         return "模型未加载"
@@ -237,18 +169,14 @@ def md_deliver(text: str) -> str:
         return text
 
 
-def html_deliver(text: str) -> str:
-    return text
-
-
 def update_html_prev(html_file: str, html_url: str) -> tuple[gr.components.markdown.Markdown, str]:
     html_content = ""
     if html_file and not html_url:
         html_path = os.path.join('html', html_file)
-        html_content = load_html_file(html_path)
+        html_content = HTML.load_html_file(html_path)
     elif html_url:
         gr.Info("正在尝试读取 HTML，具体时间依网络状况而定")
-        html_content = get_html(html_url)
+        html_content = HTML.get_html(html_url)
     return gr.Markdown(html_content), html_content
 
 
@@ -408,7 +336,7 @@ with gr.Blocks(theme=theme) as demo:
     )
 
     html_render_button.click(
-        fn=html_deliver,
+        fn=HTML.html_deliver,
         inputs=html_preview,
         outputs=output_html
     )
