@@ -67,6 +67,7 @@ def cal_token_count(html: str, max_tokens: int) -> str:
     else:
         if html is not None:
             tokens = model.tokenize(html.encode('utf-8'))
+            # 使用默认的清理参数（全部为True）来计算清理后的token数量
             tokens_cleaned = model.tokenize(HTML.clean_html(html).encode('utf-8'))
             tokens_count = len(tokens)
             tokens_count_cleaned = len(tokens_cleaned)
@@ -94,8 +95,10 @@ def generate_response(html_content: str, max_tokens: int,
                       temperature: float, top_p: float,
                       model_gen: str, instruction: str,
                       schema: str, html_clean: bool,
-                      repl_svg: bool, repl_base64: bool,
-                      new_svg: str, new_img: str) -> Generator[str | Any, Any, str | Any]:
+                      repl_script: bool, repl_style: bool,
+                      repl_meta: bool, repl_comment: bool,
+                      repl_link: bool, repl_svg: bool,
+                      repl_base64: bool) -> Generator[str | Any, Any, str | Any]:
     """
     最重要的部分，生成 Markdown
 
@@ -107,10 +110,13 @@ def generate_response(html_content: str, max_tokens: int,
     :param instruction: 自定义提示词，仅适用于第二代模型
     :param schema: 自定义输出 JSON 格式
     :param html_clean: 是否预清理 HTML 内容
-    :param repl_svg: 是否替换 SVG
-    :param repl_base64: 是否替换 base64 形式的图片
-    :param new_svg: 新的 SVG
-    :param new_img: 新的图片
+    :param repl_script: 是否删除script标签
+    :param repl_style: 是否删除style标签
+    :param repl_meta: 是否删除meta标签
+    :param repl_comment: 是否删除注释
+    :param repl_link: 是否删除link标签
+    :param repl_svg: 是否删除 SVG
+    :param repl_base64: 是否删除 base64 形式的图片
 
     :return: output: Markdown
     """
@@ -120,10 +126,13 @@ def generate_response(html_content: str, max_tokens: int,
     if html_clean:
         html_content = HTML.clean_html(
             html=html_content,
+            repl_script=repl_script,
+            repl_style=repl_style,
+            repl_meta=repl_meta,
+            repl_comment=repl_comment,
+            repl_link=repl_link,
             repl_svg=repl_svg,
-            repl_base64=repl_base64,
-            new_svg=new_svg,
-            new_img=new_img
+            repl_base64=repl_base64
         )
 
     if model is None:
@@ -202,22 +211,6 @@ def copy(content: str, remove_code_block: bool):
     pyperclip.copy(content)
 
 
-def toggle_repl_svg(repl: bool) -> gr.components.textbox.Textbox:
-    return gr.Textbox(interactive=True,
-                      label="替换后的 SVG",
-                      visible=True) if repl else gr.Textbox(interactive=True,
-                                                            label="替换后的 SVG",
-                                                            visible=False)
-
-
-def toggle_repl_img(repl: bool) -> gr.components.textbox.Textbox:
-    return gr.Textbox(interactive=True,
-                      label="替换后的图片",
-                      visible=True) if repl else gr.Textbox(interactive=True,
-                                                            label="替换后的图片",
-                                                            visible=False)
-
-
 with gr.Blocks(theme=theme) as demo:
     gr.Markdown("## ReaderLM WebUI")
     html_content_store = gr.State()
@@ -242,53 +235,49 @@ with gr.Blocks(theme=theme) as demo:
         output_md = gr.Markdown("")
     with gr.Tab("HTML"):
         html_render_warning = gr.Markdown("HTML 中的 CSS 可能会对 UI 产生意料之外的影响，请谨慎加载")
-        html_render_button = gr.Button("渲染 HTML")
+        with gr.Row():
+            html_render_button = gr.Button("渲染 HTML")
+            clear_html_button = gr.Button("清除 HTML")
         output_html = gr.HTML("")
     with gr.Tab("设置"):
-        gr.Markdown("模型设置")
-        with gr.Row():
-            n_gpu_layers_input = gr.Number(label="GPU 层数", value=-1, maximum=128, minimum=-1)
-            model_files = scan_models()
-            model_file_dropdown = gr.Dropdown(label="选择模型", choices=model_files)
-            model_type = gr.Dropdown(label="模型代数", choices=["1", "2"], value="1", interactive=True)
-        with gr.Row():
-            load_model_button = gr.Button("加载模型", variant="primary", scale=10)
-            refresh_models_list_btn = gr.Button("🔄", min_width=10, scale=1)
-            unload_model_button = gr.Button("卸载模型", scale=10)
-        model_load_info = gr.Markdown("")
-        gr.Markdown("生成设置")
-        with gr.Row():
-            n_ctx_input = gr.Number(label="上下文长度", value=204800, minimum=1)
-            max_tokens_input = gr.Number(label="最大新分配 token 数量", value=102400, minimum=1)
-        with gr.Row():
-            temperature_input = gr.Number(label="Temperature", value=0.8, minimum=0)
-            top_p_input = gr.Number(label="Top P", value=0.95, minimum=0, maximum=1)
-        remove_code_block = gr.Checkbox(interactive=True, value=True,
-                                        label="移除最外层的代码块（通常出现于 V2 模型）")
-        gr.Markdown("HTML 设置")
-        with gr.Row():
-            clean_html_cbox = gr.Checkbox(interactive=True, value=True, label="清理 HTML")
-            repl_svg = gr.Checkbox(interactive=True, value=False, label="替换 SVG")
-            repl_img = gr.Checkbox(interactive=True, value=False, label="替换 Base64 形式的图片")
-        with gr.Row():
-            new_svg = gr.Textbox(interactive=True, label="替换后的 SVG", visible=False)
-            new_img = gr.Textbox(interactive=True, label="替换后的图片", visible=False)
-        gr.Markdown("指令设置 - 只对第二代模型生效，两个设置互斥，同时只有一个生效")
-        with gr.Row():
-            custom_instruction = gr.Textbox(interactive=True, label="自定义提示词")
-            json_schema = gr.Textbox(interactive=True, label="自定义输出 JSON 格式")
+        with gr.Tab("模型设置"):
+            with gr.Row():
+                n_gpu_layers_input = gr.Number(label="GPU 层数", value=-1, maximum=128, minimum=-1)
+                model_files = scan_models()
+                model_file_dropdown = gr.Dropdown(label="选择模型", choices=model_files)
+                model_type = gr.Dropdown(label="模型代数", choices=["1", "2"], value="1", interactive=True)
+            with gr.Row():
+                load_model_button = gr.Button("加载模型", variant="primary", scale=10)
+                refresh_models_list_btn = gr.Button("🔄", min_width=10, scale=1)
+                unload_model_button = gr.Button("卸载模型", scale=10)
+            model_load_info = gr.Markdown("")
+        with gr.Tab("生成设置"):
+            with gr.Row():
+                n_ctx_input = gr.Number(label="上下文长度", value=204800, minimum=1)
+                max_tokens_input = gr.Number(label="最大新分配 token 数量", value=102400, minimum=1)
+            with gr.Row():
+                temperature_input = gr.Number(label="Temperature", value=0.8, minimum=0)
+                top_p_input = gr.Number(label="Top P", value=0.95, minimum=0, maximum=1)
+        with gr.Tab("预处理设置"):
+            with gr.Accordion("清理 HTML"):
+                clean_html_cbox = gr.Checkbox(interactive=True, value=True, label="启用")
+                with gr.Row():
+                    repl_script = gr.Checkbox(interactive=True, value=True, label="删除脚本 (script)")
+                    repl_style = gr.Checkbox(interactive=True, value=True, label="删除样式 (style)")
+                    repl_meta = gr.Checkbox(interactive=True, value=True, label="删除元标签 (meta)")
+                    repl_comment = gr.Checkbox(interactive=True, value=True, label="删除注释 (comment)")
+                    repl_link = gr.Checkbox(interactive=True, value=True, label="删除链接标签 (link)")
+                    repl_svg = gr.Checkbox(interactive=True, value=True, label="删除 SVG")
+                    repl_img = gr.Checkbox(interactive=True, value=True, label="删除 Base64 图片")
+        with gr.Tab("后处理设置"):
+            remove_code_block = gr.Checkbox(interactive=True, value=True,
+                                            label="移除最外层的代码块（通常出现于 V2 模型）")
+        with gr.Tab("指令设置"):
+            with gr.Row():
+                custom_instruction = gr.Textbox(interactive=True, label="自定义提示词")
+                json_schema = gr.Textbox(interactive=True, label="自定义输出 JSON 格式")
 
-    repl_svg.change(
-        fn=toggle_repl_svg,
-        inputs=repl_svg,
-        outputs=new_svg
-    )
-
-    repl_img.change(
-        fn=toggle_repl_img,
-        inputs=repl_img,
-        outputs=new_img
-    )
+    # 删除 repl_svg.change 和 repl_img.change 事件，因为不再需要控制可见性
 
     html_file.change(
         update_html_prev,
@@ -319,7 +308,8 @@ with gr.Blocks(theme=theme) as demo:
     generate_button.click(
         fn=generate_response,
         inputs=[html_preview, max_tokens_input, temperature_input, top_p_input, model_type, custom_instruction,
-                json_schema, clean_html_cbox, repl_svg, repl_img, new_svg, new_img],
+                json_schema, clean_html_cbox, repl_script, repl_style, repl_meta, repl_comment, repl_link, repl_svg,
+                repl_img],
         outputs=output_text
     )
 
@@ -337,7 +327,13 @@ with gr.Blocks(theme=theme) as demo:
 
     html_render_button.click(
         fn=HTML.html_deliver,
-        inputs=html_preview,
+        inputs=[html_preview, gr.State("render")],
+        outputs=output_html
+    )
+
+    clear_html_button.click(
+        fn=HTML.html_deliver,
+        inputs=[html_preview, gr.State("clear")],
         outputs=output_html
     )
 

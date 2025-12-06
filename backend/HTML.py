@@ -1,5 +1,4 @@
 import re
-
 import charset_normalizer
 import requests
 
@@ -46,19 +45,26 @@ def load_html_file(file_path: str) -> str:
         return f.read()
 
 
-def clean_html(html: str, repl_svg: bool = False,
-               repl_base64: bool = False,
-               new_svg: str = "",
-               new_img: str = "") -> str:
+def clean_html(html: str,
+               repl_script: bool = True,
+               repl_style: bool = True,
+               repl_meta: bool = True,
+               repl_comment: bool = True,
+               repl_link: bool = True,
+               repl_svg: bool = True,
+               repl_base64: bool = True) -> str:
     """
-    清理HTML内容，移除脚本、样式、注释等
+    清理HTML内容，移除脚本、样式、注释、SVG和base64图片等
 
     Args:
         html: 原始HTML内容
-        repl_svg: 是否替换SVG
-        repl_base64: 是否替换base64图片
-        new_svg: 替换后的SVG内容
-        new_img: 替换后的图片路径
+        repl_script: 是否删除script标签
+        repl_style: 是否删除style标签
+        repl_meta: 是否删除meta标签
+        repl_comment: 是否删除注释
+        repl_link: 是否删除link标签
+        repl_svg: 是否删除SVG
+        repl_base64: 是否删除base64图片
 
     Returns:
         str: 清理后的HTML
@@ -69,52 +75,46 @@ def clean_html(html: str, repl_svg: bool = False,
     meta = r"<[ ]*meta.*?>"
     comment = r"<[ ]*!--.*?--[ ]*>"
     link = r"<[ ]*link.*?>"
-    svg = r"(<svg[^>]*>)(.*?)(<\/svg>)"
+    svg = r"<svg[^>]*>.*?<\/svg>"
     base64_img = r'<img[^>]+src="data:image/[^;]+;base64,[^"]+"[^>]*>'
 
-    def replace_svg(html: str, new_content: str) -> str:
-        return re.sub(
-            svg,
-            lambda match: f"{match.group(1)}{new_content}{match.group(3)}",
-            html,
-            flags=re.DOTALL,
+    if repl_script:
+        html = re.sub(
+            script, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
+        )
+    if repl_style:
+        html = re.sub(
+            style, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
+        )
+    if repl_meta:
+        html = re.sub(
+            meta, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
+        )
+    if repl_comment:
+        html = re.sub(
+            comment, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
+        )
+    if repl_link:
+        html = re.sub(
+            link, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
         )
 
-    def replace_base64_images(html: str, new_image_src) -> str:
-        return re.sub(base64_img, f'<img src="{new_image_src}"/>', html)
-
-    html = re.sub(
-        script, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
-    )
-    html = re.sub(
-        style, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
-    )
-    html = re.sub(
-        meta, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
-    )
-    html = re.sub(
-        comment, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
-    )
-    html = re.sub(
-        link, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
-    )
-
     if repl_svg:
-        html = replace_svg(html, new_svg)
+        html = re.sub(svg, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
     if repl_base64:
-        html = replace_base64_images(html, new_img)
+        html = re.sub(base64_img, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
 
     return html
 
 
-def html_deliver(text: str) -> str:
+def html_deliver(text: str, mode: str = "clear") -> str:
     """
     传递HTML内容（原样返回）
 
-    Args:
-        text: HTML内容
-
-    Returns:
-        str: 相同的HTML内容
+    :param text: 输入文本
+    :param mode: 返回模式 - render为原样返回， clear返回空字符串
     """
-    return text
+    if mode == "render":
+        return text
+    else:
+        return ""
