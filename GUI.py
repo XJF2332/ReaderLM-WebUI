@@ -1,14 +1,10 @@
 import os
-from typing import Any, Generator
 
 import gradio as gr
 import pyperclip
-from llama_cpp import Llama
 
 from backend import HTML
-
-model = None
-stop_gen = False
+import backend.model as model
 
 theme = gr.themes.Base(
     primary_hue="violet",
@@ -29,147 +25,6 @@ theme = gr.themes.Base(
 )
 
 
-def stop_generate():
-    global stop_gen
-    stop_gen = True
-
-
-def unload_model() -> str:
-    global model
-    model = None
-    return "模型已卸载"
-
-
-def load_model(model_path: str,
-               n_gpu_layers: int,
-               n_ctx: int) -> tuple[str, gr.components.dropdown.Dropdown]:
-    global model
-    model = None
-    model = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
-    metadata = model.metadata
-    if "general.version" in metadata.keys():
-        version = metadata["general.version"]
-        if version == "v2":
-            return f"模型 '{model_path}' 已成功加载", gr.Dropdown(
-                label="模型代数", choices=["1", "2"], value="2", interactive=True)
-        else:
-            return f"模型 '{model_path}' 已成功加载，但它看起来不像一代模型，也不像二代模型", gr.Dropdown(
-                label="模型代数", choices=["1", "2"], value="1", interactive=True)
-    else:
-        return f"模型 '{model_path}' 已成功加载", gr.Dropdown(
-            label="模型代数", choices=["1", "2"], value="1", interactive=True)
-
-
-def cal_token_count(html: str, max_tokens: int) -> str:
-    global model
-    if model is None:
-        return "未加载模型，无法计算 Token 数量"
-    else:
-        if html is not None:
-            tokens = model.tokenize(html.encode('utf-8'))
-            # 使用默认的清理参数（全部为True）来计算清理后的token数量
-            tokens_cleaned = model.tokenize(HTML.clean_html(html).encode('utf-8'))
-            tokens_count = len(tokens)
-            tokens_count_cleaned = len(tokens_cleaned)
-            if tokens_count_cleaned > max_tokens:
-                return \
-                    f"""⚠️HTML 过长，尝试减少文件长度或增加上下文长度⚠️  
-    Token 数量：{tokens_count}  
-    预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}"""
-            elif tokens_count > max_tokens >= tokens_count_cleaned:
-                return \
-                    f"""⚠️HTML 过长，需要预清理⚠️  
-    Token 数量：{tokens_count}  
-    预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}"""
-            else:
-                return \
-                    f"""
-    Token 数量：{tokens_count}  
-    预清理 HTML 后的预计 Token 数量：{tokens_count_cleaned}
-    """
-        else:
-            return "文本为空"
-
-
-def generate_response(html_content: str, max_tokens: int,
-                      temperature: float, top_p: float,
-                      model_gen: str, instruction: str,
-                      schema: str, html_clean: bool,
-                      repl_script: bool, repl_style: bool,
-                      repl_meta: bool, repl_comment: bool,
-                      repl_link: bool, repl_svg: bool,
-                      repl_base64: bool) -> Generator[str | Any, Any, str | Any]:
-    """
-    最重要的部分，生成 Markdown
-
-    :param html_content: 将要转换的 HTML 内容
-    :param max_tokens: 最大 token 数量
-    :param temperature: 温度
-    :param top_p: top_p
-    :param model_gen: 模型代数
-    :param instruction: 自定义提示词，仅适用于第二代模型
-    :param schema: 自定义输出 JSON 格式
-    :param html_clean: 是否预清理 HTML 内容
-    :param repl_script: 是否删除script标签
-    :param repl_style: 是否删除style标签
-    :param repl_meta: 是否删除meta标签
-    :param repl_comment: 是否删除注释
-    :param repl_link: 是否删除link标签
-    :param repl_svg: 是否删除 SVG
-    :param repl_base64: 是否删除 base64 形式的图片
-
-    :return: output: Markdown
-    """
-    global model, stop_gen
-    stop_gen = False
-
-    if html_clean:
-        html_content = HTML.clean_html(
-            html=html_content,
-            repl_script=repl_script,
-            repl_style=repl_style,
-            repl_meta=repl_meta,
-            repl_comment=repl_comment,
-            repl_link=repl_link,
-            repl_svg=repl_svg,
-            repl_base64=repl_base64
-        )
-
-    if model is None:
-        return "模型未加载"
-
-    # 构建提示词
-    if model_gen == "2":
-        if not instruction:
-            instruction = "Extract the main content from the given HTML and convert it to Markdown format."
-        if schema:
-            instruction = "Extract the specified information from a list of news threads and present it in a structured JSON format."
-            prompt = f"{instruction}\n```html\n{html_content}\n```\nThe JSON schema is as follows:```json\n{schema}\n```"
-        else:
-            prompt = f"{instruction}\n```html\n{html_content}\n```"
-        input_text = prompt
-    else:
-        input_text = f"{html_content}"
-    message = [
-        {
-            "role": "user",
-            "content": input_text
-        }
-    ]
-    # 流式生成
-    temp = model.create_chat_completion(messages=message, max_tokens=max_tokens,
-                                        temperature=temperature, top_p=top_p, stream=True)
-    output = ""
-    for chunk in temp:
-        if not "content" in chunk["choices"][0]["delta"]:
-            continue
-        output += chunk["choices"][0]["delta"]["content"]
-        if stop_gen:  # 检测stop_gen是否为真
-            break
-        yield output
-    return output
-
-
 def md_deliver(text: str) -> str:
     lines = text.split("\n")
     if lines[0] == "```markdown" and lines[-2] == "```" and len(lines) >= 2:
@@ -178,14 +33,14 @@ def md_deliver(text: str) -> str:
         return text
 
 
-def update_html_prev(html_file: str, html_url: str) -> tuple[gr.components.markdown.Markdown, str]:
+def update_html_prev(html_path: str, url: str) -> tuple[gr.components.markdown.Markdown, str]:
     html_content = ""
-    if html_file and not html_url:
-        html_path = os.path.join('html', html_file)
+    if html_path and not url:
+        html_path = os.path.join('html', html_path)
         html_content = HTML.load_html_file(html_path)
-    elif html_url:
+    elif url:
         gr.Info("正在尝试读取 HTML，具体时间依网络状况而定")
-        html_content = HTML.get_html(html_url)
+        html_content = HTML.get_html(url)
     return gr.Markdown(html_content), html_content
 
 
@@ -205,8 +60,8 @@ def refresh_model_list(current_selection: str) -> gr.components.dropdown.Dropdow
     return gr.Dropdown(label="选择模型", choices=file_list, interactive=True, value=new_selection)
 
 
-def copy(content: str, remove_code_block: bool):
-    if remove_code_block:
+def copy(content: str, remove_markdown_block: bool):
+    if remove_markdown_block:
         content = md_deliver(content)
     pyperclip.copy(content)
 
@@ -262,13 +117,13 @@ with gr.Blocks(theme=theme) as demo:
             with gr.Accordion("清理 HTML"):
                 clean_html_cbox = gr.Checkbox(interactive=True, value=True, label="启用")
                 with gr.Row():
-                    repl_script = gr.Checkbox(interactive=True, value=True, label="删除脚本 (script)")
-                    repl_style = gr.Checkbox(interactive=True, value=True, label="删除样式 (style)")
-                    repl_meta = gr.Checkbox(interactive=True, value=True, label="删除元标签 (meta)")
-                    repl_comment = gr.Checkbox(interactive=True, value=True, label="删除注释 (comment)")
-                    repl_link = gr.Checkbox(interactive=True, value=True, label="删除链接标签 (link)")
-                    repl_svg = gr.Checkbox(interactive=True, value=True, label="删除 SVG")
-                    repl_img = gr.Checkbox(interactive=True, value=True, label="删除 Base64 图片")
+                    remove_script = gr.Checkbox(interactive=True, value=True, label="删除脚本 (script)")
+                    remove_style = gr.Checkbox(interactive=True, value=True, label="删除样式 (style)")
+                    remove_meta = gr.Checkbox(interactive=True, value=True, label="删除元标签 (meta)")
+                    remove_comment = gr.Checkbox(interactive=True, value=True, label="删除注释 (comment)")
+                    remove_link = gr.Checkbox(interactive=True, value=True, label="删除链接标签 (link)")
+                    remove_svg = gr.Checkbox(interactive=True, value=True, label="删除 SVG")
+                    remove_img = gr.Checkbox(interactive=True, value=True, label="删除 Base64 图片")
         with gr.Tab("后处理设置"):
             remove_code_block = gr.Checkbox(interactive=True, value=True,
                                             label="移除最外层的代码块（通常出现于 V2 模型）")
@@ -276,8 +131,6 @@ with gr.Blocks(theme=theme) as demo:
             with gr.Row():
                 custom_instruction = gr.Textbox(interactive=True, label="自定义提示词")
                 json_schema = gr.Textbox(interactive=True, label="自定义输出 JSON 格式")
-
-    # 删除 repl_svg.change 和 repl_img.change 事件，因为不再需要控制可见性
 
     html_file.change(
         update_html_prev,
@@ -292,13 +145,13 @@ with gr.Blocks(theme=theme) as demo:
     )
 
     html_content_store.change(
-        fn=cal_token_count,
+        fn=model.cal_token_count,
         inputs=[html_content_store, n_ctx_input],
         outputs=token_count
     )
 
     load_model_button.click(
-        fn=lambda model_file, n_gpu_layers, n_ctx: load_model(
+        fn=lambda model_file, n_gpu_layers, n_ctx: model.load_model(
             os.path.join('models', model_file), n_gpu_layers, n_ctx
         ),
         inputs=[model_file_dropdown, n_gpu_layers_input, n_ctx_input],
@@ -306,10 +159,10 @@ with gr.Blocks(theme=theme) as demo:
     )
 
     generate_button.click(
-        fn=generate_response,
+        fn=model.generate_response,
         inputs=[html_preview, max_tokens_input, temperature_input, top_p_input, model_type, custom_instruction,
-                json_schema, clean_html_cbox, repl_script, repl_style, repl_meta, repl_comment, repl_link, repl_svg,
-                repl_img],
+                json_schema, clean_html_cbox, remove_script, remove_style, remove_meta, remove_comment, remove_link,
+                remove_svg, remove_img],
         outputs=output_text
     )
 
@@ -320,7 +173,7 @@ with gr.Blocks(theme=theme) as demo:
     )
 
     stop_button.click(
-        fn=stop_generate,
+        fn=model.stop_generate,
         inputs=None,
         outputs=None
     )
@@ -338,7 +191,7 @@ with gr.Blocks(theme=theme) as demo:
     )
 
     unload_model_button.click(
-        fn=unload_model,
+        fn=model.unload_model,
         inputs=None,
         outputs=model_load_info
     )
