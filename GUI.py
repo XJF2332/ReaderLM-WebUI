@@ -5,6 +5,7 @@ import pyperclip
 
 from backend import HTML
 import backend.model as model
+import backend.markdown as markdown
 
 theme = gr.themes.Base(
     primary_hue="violet",
@@ -23,14 +24,6 @@ theme = gr.themes.Base(
     checkbox_background_color='*primary_50',
     checkbox_background_color_focus='*primary_200'
 )
-
-
-def md_deliver(text: str) -> str:
-    lines = text.split("\n")
-    if lines[0] == "```markdown" and lines[-2] == "```" and len(lines) >= 2:
-        return "\n".join(lines[1:-2])
-    else:
-        return text
 
 
 def update_html_prev(html_path: str, url: str) -> tuple[gr.components.markdown.Markdown, str]:
@@ -62,7 +55,7 @@ def refresh_model_list(current_selection: str) -> gr.components.dropdown.Dropdow
 
 def copy(content: str, remove_markdown_block: bool):
     if remove_markdown_block:
-        content = md_deliver(content)
+        content = markdown.md_deliver(content)
     pyperclip.copy(content)
 
 
@@ -86,7 +79,10 @@ with gr.Blocks(theme=theme) as demo:
                     copy_button = gr.Button("复制")
                 output_text = gr.Textbox(label="Markdown", interactive=False, lines=20)
     with gr.Tab("Markdown"):
-        render_button = gr.Button("渲染 Markdown")
+        md_save_path = gr.Textbox(label="将 Markdown 保存到", interactive=True)
+        with gr.Row():
+            save_md_button = gr.Button("保存 Markdown", variant="primary")
+            render_button = gr.Button("渲染 Markdown")
         output_md = gr.Markdown("")
     with gr.Tab("HTML"):
         html_render_warning = gr.Markdown("HTML 中的 CSS 可能会对 UI 产生意料之外的影响，请谨慎加载")
@@ -110,7 +106,6 @@ with gr.Blocks(theme=theme) as demo:
             with gr.Row():
                 n_ctx_input = gr.Number(label="上下文长度", value=204800, minimum=1)
                 max_tokens_input = gr.Number(label="最大新分配 token 数量", value=102400, minimum=1)
-            with gr.Row():
                 temperature_input = gr.Number(label="Temperature", value=0.8, minimum=0)
                 top_p_input = gr.Number(label="Top P", value=0.95, minimum=0, maximum=1)
         with gr.Tab("预处理设置"):
@@ -128,9 +123,10 @@ with gr.Blocks(theme=theme) as demo:
             remove_code_block = gr.Checkbox(interactive=True, value=True,
                                             label="移除最外层的代码块（通常出现于 V2 模型）")
         with gr.Tab("指令设置"):
+            gr.Markdown("如果设置了自定义格式，则自定义指令不会生效")
             with gr.Row():
-                custom_instruction = gr.Textbox(interactive=True, label="自定义提示词")
-                json_schema = gr.Textbox(interactive=True, label="自定义输出 JSON 格式")
+                custom_instruction = gr.Textbox(interactive=True, label="自定义提示词", lines=5)
+                json_schema = gr.Textbox(interactive=True, label="自定义输出 JSON 格式", lines=5)
 
     html_file.change(
         update_html_prev,
@@ -167,7 +163,7 @@ with gr.Blocks(theme=theme) as demo:
     )
 
     render_button.click(
-        fn=md_deliver,
+        fn=markdown.md_deliver,
         inputs=output_text,
         outputs=output_md
     )
@@ -206,6 +202,12 @@ with gr.Blocks(theme=theme) as demo:
         fn=refresh_model_list,
         inputs=model_file_dropdown,
         outputs=model_file_dropdown
+    )
+
+    save_md_button.click(
+        fn=markdown.save_md,
+        inputs=[output_text, remove_code_block, md_save_path],
+        outputs=None
     )
 
 demo.launch()
