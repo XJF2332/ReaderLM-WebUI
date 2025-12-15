@@ -1,5 +1,15 @@
 import os
 import gradio as gr
+import pyperclip
+
+def copy(content: str, remove_markdown_block: bool):
+    try:
+        if remove_markdown_block:
+            content = md_deliver(content)
+        pyperclip.copy(content)
+        gr.Info("Markdown 已复制")
+    except Exception as e:
+        raise gr.Error(f"复制失败：{str(e)}")
 
 def md_deliver(text: str) -> str:
     """
@@ -13,14 +23,14 @@ def md_deliver(text: str) -> str:
     else:
         return text
 
-def save_md(text: str, remove_codeblock: bool, path: str = "") -> None:
+def save_md(text: str, remove_codeblock: bool, path: str = "", max_length: int = 40) -> None:
     if remove_codeblock:
         text = md_deliver(text)
 
     if not path:
         if not os.path.exists("saved_files"):
             os.mkdir("saved_files")
-        path = os.path.join("saved_files", f"{text.splitlines()[0]}.md")
+        path = os.path.join("saved_files", f"{text.splitlines()[0][0:max_length]}.md")
     else:
         ext = os.path.splitext(path)[1]
         if ext == ".md":

@@ -4,8 +4,14 @@ from llama_cpp import Llama
 
 from backend import HTML
 
+import os
+
 model = None
 stop_gen = False
+
+
+def scan_models() -> list:
+    return [f for f in os.listdir("models") if f.lower().endswith(".gguf")]
 
 
 def load_model(model_path: str,

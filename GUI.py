@@ -1,7 +1,6 @@
 import os
 
 import gradio as gr
-import pyperclip
 
 from backend import HTML
 import backend.model as model
@@ -37,12 +36,8 @@ def update_html_prev(html_path: str, url: str) -> tuple[gr.components.markdown.M
     return gr.Markdown(html_content), html_content
 
 
-def scan_models() -> list:
-    return [f for f in os.listdir("models") if f.lower().endswith(".gguf")]
-
-
 def refresh_model_list(current_selection: str) -> gr.components.dropdown.Dropdown:
-    file_list = scan_models()
+    file_list = model.scan_models()
     if current_selection in file_list:
         new_selection = current_selection
     elif file_list:
@@ -51,12 +46,6 @@ def refresh_model_list(current_selection: str) -> gr.components.dropdown.Dropdow
         new_selection = None
 
     return gr.Dropdown(label="选择模型", choices=file_list, interactive=True, value=new_selection)
-
-
-def copy(content: str, remove_markdown_block: bool):
-    if remove_markdown_block:
-        content = markdown.md_deliver(content)
-    pyperclip.copy(content)
 
 
 with gr.Blocks(theme=theme) as demo:
@@ -79,7 +68,18 @@ with gr.Blocks(theme=theme) as demo:
                     copy_button = gr.Button("复制")
                 output_text = gr.Textbox(label="Markdown", interactive=False, lines=20)
     with gr.Tab("Markdown"):
-        md_save_path = gr.Textbox(label="将 Markdown 保存到", interactive=True)
+        with gr.Row():
+            md_save_path = gr.Textbox(
+                label="将 Markdown 保存到",
+                interactive=True,
+                placeholder="留空以在 saved_files 文件夹中生成文件",
+                scale=4
+            )
+            max_filename_length = gr.Number(
+                value=40,
+                interactive=True,
+                label="自动生成文件名的长度限制"
+            )
         with gr.Row():
             save_md_button = gr.Button("保存 Markdown", variant="primary")
             render_button = gr.Button("渲染 Markdown")
@@ -94,7 +94,7 @@ with gr.Blocks(theme=theme) as demo:
         with gr.Tab("模型设置"):
             with gr.Row():
                 n_gpu_layers_input = gr.Number(label="GPU 层数", value=-1, maximum=128, minimum=-1)
-                model_files = scan_models()
+                model_files = model.scan_models()
                 model_file_dropdown = gr.Dropdown(label="选择模型", choices=model_files)
                 model_type = gr.Dropdown(label="模型代数", choices=["1", "2"], value="1", interactive=True)
             with gr.Row():
@@ -193,7 +193,7 @@ with gr.Blocks(theme=theme) as demo:
     )
 
     copy_button.click(
-        fn=copy,
+        fn=markdown.copy,
         inputs=[output_text, remove_code_block],
         outputs=None
     )
@@ -206,7 +206,8 @@ with gr.Blocks(theme=theme) as demo:
 
     save_md_button.click(
         fn=markdown.save_md,
-        inputs=[output_text, remove_code_block, md_save_path],
+        inputs=[output_text, remove_code_block,
+                md_save_path,max_filename_length],
         outputs=None
     )
 
