@@ -2,9 +2,9 @@ import os
 
 import gradio as gr
 
-from backend import HTML
-import backend.model as model
 import backend.markdown as markdown
+import backend.model as model
+from backend import HTML, config
 
 theme = gr.themes.Base(
     primary_hue="violet",
@@ -69,17 +69,10 @@ with gr.Blocks(theme=theme) as demo:
                 output_text = gr.Textbox(label="Markdown", interactive=False, lines=20)
     with gr.Tab("Markdown"):
         with gr.Row():
-            md_save_path = gr.Textbox(
-                label="将 Markdown 保存到",
-                interactive=True,
-                placeholder="留空以在 saved_files 文件夹中生成文件",
-                scale=4
-            )
-            max_filename_length = gr.Number(
-                value=40,
-                interactive=True,
-                label="自动生成文件名的长度限制"
-            )
+            md_save_path = gr.Textbox(label="将 Markdown 保存到", interactive=True,
+                                      placeholder="留空以在 saved_files 文件夹中生成文件", scale=4)
+            max_filename_length = gr.Number(value=config.get("max_filename_length", 40), interactive=True,
+                                            label="自动生成文件名的长度限制")
         with gr.Row():
             save_md_button = gr.Button("保存 Markdown", variant="primary")
             render_button = gr.Button("渲染 Markdown")
@@ -93,9 +86,11 @@ with gr.Blocks(theme=theme) as demo:
     with gr.Tab("设置"):
         with gr.Tab("模型设置"):
             with gr.Row():
-                n_gpu_layers_input = gr.Number(label="GPU 层数", value=-1, maximum=128, minimum=-1)
+                n_gpu_layers_input = gr.Number(label="GPU 层数", value=config.get("n_gpu_layers", -1), maximum=128,
+                                               minimum=-1)
                 model_files = model.scan_models()
-                model_file_dropdown = gr.Dropdown(label="选择模型", choices=model_files)
+                model_file_dropdown = gr.Dropdown(label="选择模型", choices=model_files,
+                                                  value=config.get("model_path", None))
                 model_type = gr.Dropdown(label="模型代数", choices=["1", "2"], value="1", interactive=True)
             with gr.Row():
                 load_model_button = gr.Button("加载模型", variant="primary", scale=10)
@@ -104,29 +99,32 @@ with gr.Blocks(theme=theme) as demo:
             model_load_info = gr.Markdown("")
         with gr.Tab("生成设置"):
             with gr.Row():
-                n_ctx_input = gr.Number(label="上下文长度", value=204800, minimum=1)
-                max_tokens_input = gr.Number(label="最大新分配 token 数量", value=102400, minimum=1)
-                temperature_input = gr.Number(label="Temperature", value=0.8, minimum=0)
-                top_p_input = gr.Number(label="Top P", value=0.95, minimum=0, maximum=1)
+                n_ctx_input = gr.Number(label="上下文长度", value=config.get("n_ctx", 204800), minimum=1)
+                max_tokens_input = gr.Number(label="最大新分配 token 数量", value=config.get("max_new_tokens", 102400),
+                                             minimum=1)
+                temperature_input = gr.Number(label="Temperature", value=config.get("temperature", 0.8), minimum=0)
+                top_p_input = gr.Number(label="Top P", value=config.get("top_p", 0.95), minimum=0, maximum=1)
         with gr.Tab("预处理设置"):
             with gr.Accordion("清理 HTML"):
-                clean_html_cbox = gr.Checkbox(interactive=True, value=True, label="启用")
+                clean_html_cbox = gr.Checkbox(interactive=True, value=config.get("html_clean", True), label="启用")
                 with gr.Row():
-                    remove_script = gr.Checkbox(interactive=True, value=True, label="删除脚本 (script)")
-                    remove_style = gr.Checkbox(interactive=True, value=True, label="删除样式 (style)")
-                    remove_meta = gr.Checkbox(interactive=True, value=True, label="删除元标签 (meta)")
-                    remove_comment = gr.Checkbox(interactive=True, value=True, label="删除注释 (comment)")
-                    remove_link = gr.Checkbox(interactive=True, value=True, label="删除链接标签 (link)")
-                    remove_svg = gr.Checkbox(interactive=True, value=True, label="删除 SVG")
-                    remove_img = gr.Checkbox(interactive=True, value=True, label="删除 Base64 图片")
+                    remove_script = gr.Checkbox(interactive=True, value=config.get("remove_script", True), label="删除脚本 (script)")
+                    remove_style = gr.Checkbox(interactive=True, value=config.get("remove_style", True), label="删除样式 (style)")
+                    remove_meta = gr.Checkbox(interactive=True, value=config.get("remove_meta", True), label="删除元标签 (meta)")
+                    remove_comment = gr.Checkbox(interactive=True, value=config.get("remove_comment", True), label="删除注释 (comment)")
+                    remove_link = gr.Checkbox(interactive=True, value=config.get("remove_link", True), label="删除链接标签 (link)")
+                    remove_svg = gr.Checkbox(interactive=True, value=config.get("remove_svg", True), label="删除 SVG")
+                    remove_img = gr.Checkbox(interactive=True, value=config.get("remove_base64", True), label="删除 Base64 图片")
         with gr.Tab("后处理设置"):
-            remove_code_block = gr.Checkbox(interactive=True, value=True,
+            remove_code_block = gr.Checkbox(interactive=True, value=config.get("remove_codeblock", True),
                                             label="移除最外层的代码块（通常出现于 V2 模型）")
         with gr.Tab("指令设置"):
             gr.Markdown("如果设置了自定义格式，则自定义指令不会生效")
             with gr.Row():
-                custom_instruction = gr.Textbox(interactive=True, label="自定义提示词", lines=5)
-                json_schema = gr.Textbox(interactive=True, label="自定义输出 JSON 格式", lines=5)
+                custom_instruction = gr.Textbox(interactive=True, label="自定义提示词", lines=5,
+                                                value=config.get("instruction", ""))
+                json_schema = gr.Textbox(interactive=True, label="自定义输出 JSON 格式", lines=5,
+                                         value=config.get("schema", ""))
 
     html_file.change(
         update_html_prev,
@@ -211,4 +209,4 @@ with gr.Blocks(theme=theme) as demo:
         outputs=None
     )
 
-demo.launch()
+demo.launch(inbrowser=True)

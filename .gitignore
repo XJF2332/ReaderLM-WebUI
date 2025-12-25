@@ -7,3 +7,5 @@
 /Reader-LM.bat
 /backend/__pycache__
 /saved_files
+/configs
+configs/config.json

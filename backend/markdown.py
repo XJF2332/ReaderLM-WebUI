@@ -2,6 +2,8 @@ import os
 import gradio as gr
 import pyperclip
 
+from backend import config, save_config
+
 def copy(content: str, remove_markdown_block: bool):
     try:
         if remove_markdown_block:
@@ -23,14 +25,18 @@ def md_deliver(text: str) -> str:
     else:
         return text
 
-def save_md(text: str, remove_codeblock: bool, path: str = "", max_length: int = 40) -> None:
+def save_md(text: str, remove_codeblock: bool, path: str = "", max_filename_length: int = 40) -> None:
+    config["remove_codeblock"] = remove_codeblock
+    config["max_filename_length"] = max_filename_length
+    save_config()
+
     if remove_codeblock:
         text = md_deliver(text)
 
     if not path:
         if not os.path.exists("saved_files"):
             os.mkdir("saved_files")
-        path = os.path.join("saved_files", f"{text.splitlines()[0][0:max_length]}.md")
+        path = os.path.join("saved_files", f"{text.splitlines()[0][0:max_filename_length]}.md")
     else:
         ext = os.path.splitext(path)[1]
         if ext == ".md":

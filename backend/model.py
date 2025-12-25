@@ -2,7 +2,7 @@ from typing import Any, Generator
 
 from llama_cpp import Llama
 
-from backend import HTML
+from backend import HTML, config, save_config
 
 import os
 
@@ -20,6 +20,12 @@ def load_model(model_path: str,
     global model
     model = None
     model = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
+
+    config["n_gpu_layers"] = n_gpu_layers
+    config["n_ctx"] = n_ctx
+    config["model_path"] = os.path.basename(model_path)
+    save_config()
+
     metadata = model.metadata
     if "general.version" in metadata.keys():
         version = metadata["general.version"]
@@ -77,10 +83,10 @@ def generate_response(html_content: str, max_tokens: int,
                       temperature: float, top_p: float,
                       model_gen: str, instruction: str,
                       schema: str, html_clean: bool,
-                      repl_script: bool, repl_style: bool,
-                      repl_meta: bool, repl_comment: bool,
-                      repl_link: bool, repl_svg: bool,
-                      repl_base64: bool) -> Generator[str | Any, Any, str | Any]:
+                      remove_script: bool, remove_style: bool,
+                      remove_meta: bool, remove_comment: bool,
+                      remove_link: bool, remove_svg: bool,
+                      remove_base64: bool) -> Generator[str | Any, Any, str | Any]:
     """
     最重要的部分，生成 Markdown
 
@@ -92,29 +98,44 @@ def generate_response(html_content: str, max_tokens: int,
     :param instruction: 自定义提示词，仅适用于第二代模型
     :param schema: 自定义输出 JSON 格式
     :param html_clean: 是否预清理 HTML 内容
-    :param repl_script: 是否删除script标签
-    :param repl_style: 是否删除style标签
-    :param repl_meta: 是否删除meta标签
-    :param repl_comment: 是否删除注释
-    :param repl_link: 是否删除link标签
-    :param repl_svg: 是否删除 SVG
-    :param repl_base64: 是否删除 base64 形式的图片
+    :param remove_script: 是否删除script标签
+    :param remove_style: 是否删除style标签
+    :param remove_meta: 是否删除meta标签
+    :param remove_comment: 是否删除注释
+    :param remove_link: 是否删除link标签
+    :param remove_svg: 是否删除 SVG
+    :param remove_base64: 是否删除 base64 形式的图片
 
     :return: output: Markdown
     """
     global model, stop_gen
     stop_gen = False
 
+    config["max_new_tokens"] = max_tokens
+    config["temperature"] = temperature
+    config["top_p"] = top_p
+    config["instruction"] = instruction
+    config["schema"] = schema
+    config["html_clean"] = html_clean
+    config["remove_script"] = remove_script
+    config["remove_style"] = remove_style
+    config["remove_meta"] = remove_meta
+    config["remove_comment"] = remove_comment
+    config["remove_link"] = remove_link
+    config["remove_svg"] = remove_svg
+    config["remove_base64"] = remove_base64
+    save_config()
+
     if html_clean:
         html_content = HTML.clean_html(
             html=html_content,
-            remove_script=repl_script,
-            remove_style=repl_style,
-            remove_meta=repl_meta,
-            remove_comment=repl_comment,
-            remove_link=repl_link,
-            remove_svg=repl_svg,
-            remove_base64=repl_base64
+            remove_script=remove_script,
+            remove_style=remove_style,
+            remove_meta=remove_meta,
+            remove_comment=remove_comment,
+            remove_link=remove_link,
+            remove_svg=remove_svg,
+            remove_base64=remove_base64
         )
 
     if model is None:
@@ -146,7 +167,7 @@ def generate_response(html_content: str, max_tokens: int,
         if not "content" in chunk["choices"][0]["delta"]:
             continue
         output += chunk["choices"][0]["delta"]["content"]
-        if stop_gen:  # 检测stop_gen是否为真
+        if stop_gen: # 用于终止流式生成
             break
         yield output
     return output
