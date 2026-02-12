@@ -48,7 +48,7 @@ def refresh_model_list(current_selection: str) -> gr.components.dropdown.Dropdow
     return gr.Dropdown(label="选择模型", choices=file_list, interactive=True, value=new_selection)
 
 
-with gr.Blocks(theme=theme) as demo:
+with gr.Blocks() as demo:
     gr.Markdown("## ReaderLM WebUI")
     html_content_store = gr.State()
 
@@ -209,4 +209,4 @@ with gr.Blocks(theme=theme) as demo:
         outputs=None
     )
 
-demo.launch(inbrowser=True)
+demo.launch(inbrowser=True, theme=theme)
